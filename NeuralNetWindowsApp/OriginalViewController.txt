@@ -1,0 +1,105 @@
+//
+//  ViewController.swift
+//  classikey
+//
+//  Created by Phillip Williams on 2015-10-22.
+//  Copyright (c) 2015 Phillip Williams. All rights reserved.
+//
+
+import UIKit
+
+class ViewController: UIViewController {
+
+    @IBOutlet weak var dataLabel: UILabel!
+    @IBOutlet weak var dataButton: UIButton!
+    
+    var AI: Network? = NSKeyedUnarchiver.unarchiveObject(withFile: Network.ArchiveURL.path!) as? Network
+    var audioData = AudioInput()
+    var trainingData = [(signal: [Float],expected: [Float])]()
+    var count = 0
+    
+    override func viewDidLoad() {
+        // Load AI from memory, or create new AI
+        if (self.AI != nil) {
+            self.AI = self.AI!
+        } else {
+            self.AI = Network(nodes: [2048,512,13], weight_adapt: 0.25,bias_adapt: 0.25)
+        }
+    }
+    @IBAction func countUp() {
+        
+        self.count = (self.count + 1) % 14
+        if(self.count != 13){
+            dataButton.setTitle("\(count)", for: UIControlState())
+        }else{
+            dataButton.setTitle("none", for: UIControlState())
+        }
+        print(count)
+    }
+    @IBAction func countDown() {
+        
+        self.count = self.count - 1
+        
+        if(self.count < 0){
+            self.count = 13
+        }
+        if(self.count != 13){
+            dataButton.setTitle("\(count)", for: UIControlState())
+        }else{
+            dataButton.setTitle("none", for: UIControlState())
+        }
+        
+        print(count)
+        
+    }
+    
+    @IBAction func collectData() {
+        let priority = DispatchQueue.GlobalQueuePriority.default
+        DispatchQueue.global(priority: priority).async {
+            var temp = [Float](repeating: 0.0, count: 13)
+            if(self.count != 13){
+                temp[self.count] = 1.0
+            }
+            let index = Int((Float(arc4random()) / Float(UINT32_MAX)) * Float(self.trainingData.count))
+                self.trainingData.insert((signal: self.audioData.audioSample.getArray(), expected: temp), at: index)
+            }
+    }
+    @IBAction func backProp() {
+        for i in 0 ..< self.trainingData.count {
+            AI!.learn(SignalUtility.scaleSignal(SignalUtility.DTFT(self.trainingData[i].signal),scale:1000), expected: self.trainingData[i].expected)
+            let isSuccessfulSave = NSKeyedArchiver.archiveRootObject(AI!, toFile: Network.ArchiveURL.path!)
+            if !isSuccessfulSave {
+                print("Failed to save...")
+            } else {
+                print("saved...")
+            }
+            print("\(Float(i*100)/Float(self.trainingData.count))")
+        }
+    }
+    
+    @IBAction func notation() {
+        let priority = DispatchQueue.GlobalQueuePriority.default
+        DispatchQueue.global(priority: priority).async {
+            let temp = self.audioData.audioSample.getArray()
+            DispatchQueue.main.async {
+                self.dataLabel.text = "\(self.AI!.feedForward(SignalUtility.scaleSignal(SignalUtility.DTFT(temp),scale:1000)))"
+            }
+        }
+
+    }
+    
+
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        // Dispose of any resources that can be recreated.
+    }
+}
+// code to save net to disk
+/*let isSuccessfulSave = NSKeyedArchiver.archiveRootObject(AI, toFile: Network.ArchiveURL.path!)
+if !isSuccessfulSave {
+print("Failed to save meals...")
+}*/
+// code to load from disk
+/*
+var AI = NSKeyedUnarchiver.unarchiveObjectWithFile(Network.ArchiveURL.path!) as! Network
+*/
